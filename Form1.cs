@@ -1,6 +1,7 @@
 ﻿using SampleFileUploader.Models.Uploader;
 using SuperSimpleTcp;
 using System.Text;
+using Newtonsoft.Json;
 
 
 namespace SampleFileUploader
@@ -49,9 +50,15 @@ namespace SampleFileUploader
             MessageBox.Show("Disconnect from server!", "TCP Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        static void DataReceived(object sender, DataReceivedEventArgs e)
+        private void DataReceived(object sender, DataReceivedEventArgs e)
         {
-
+            if (e != null)
+            {
+                string str = System.Text.Encoding.Default.GetString(e.Data);
+                ServerResponse? response = JsonConvert.DeserializeObject<ServerResponse>(str);
+                if (response != null)
+                    uploader.response = response.result;
+            }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -69,17 +76,13 @@ namespace SampleFileUploader
         {
             uploader.clear();
             OpenFileDialog openFileDialog = new OpenFileDialog();
-
-            // Yalnızca .bin dosyalarını göster
             openFileDialog.Filter = "Binary files (*.bin)|*.bin";
 
-            // Dosya seçme penceresini göster
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                // Seçilen dosya yolunu al
                 string filePath = openFileDialog.FileName;
                 lblFilePath.Text = filePath;
-                // Dosya içeriğini oku ve base64 formatına çevir
+
                 byte[] fileBytes = File.ReadAllBytes(filePath);
 
                 if (fileBytes.Length > 0)
@@ -92,12 +95,28 @@ namespace SampleFileUploader
 
         private void btnStartUpload_Click(object sender, EventArgs e)
         {
-            while(true)
+            while (true)
             {
-                uploader.sendNextPacked();
-                while (uploader.waitResponseFlag());
-                if (!uploader.keepSend) break;
+                if (uploader.sendNextPacked())
+                {
+                    if (!uploader.waitResponseFlag())
+                    {
+                        MessageBox.Show("Timeout!!!", "TCP Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        break;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Upload Done!", "TCP Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    break;
+                }
             }
+            uploader.clear();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }

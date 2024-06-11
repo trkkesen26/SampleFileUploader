@@ -2,10 +2,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
+using System.IO.Packaging;
 using System.Linq;
 using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Threading.Tasks;
+using Force.Crc32;
 
 namespace SampleFileUploader.Models.Uploader
 {
@@ -47,25 +51,46 @@ namespace SampleFileUploader.Models.Uploader
 
         private bool checkTimer()
         {
-            timer++;
-            if (timer > 50000)
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+    
+            while(true)
             {
-                timer = 0;
-                keepSend = false;
-                return true;
-            }
-            else
-            {
-                return false;
+                if (sw.ElapsedMilliseconds > 30000)
+                {
+                    return false;
+                }
+                else if (response)
+                {
+                    response = false;
+                    return true;
+                }
+                else if (client != null && !client.IsConnected)
+                {
+                    return false;
+                }
             }
         }
 
-        public void sendNextPacked()
+        public bool sendNextPacked()
         {
+            if (lastSentByte >= binFile.Length)
+            {
+                return false;
+            }
+            response = false;
             byte[] subArray = new byte[1024];
-            Array.Copy(binFile, lastSentByte, subArray, 0, packedSize);
-
+            int i = (binFile.Length - lastSentByte) < packedSize ? (binFile.Length - lastSentByte) : packedSize;
+            Array.Copy(binFile, lastSentByte, subArray, 0, i);
+            String crc = String.Format("0x{0:X}", Crc32CAlgorithm.Compute(subArray));
             string base64String = Convert.ToBase64String(subArray);
+            if (client != null)
+            {
+                lastSentByte += i;
+                string message = String.Format("{{\"command\": {0}, \"data\": \"{1}\", \"currentSize\": {2}, \"totalSize\": {3}, \"crc\": {4}}}", 3, base64String, lastSentByte, binFile.Length, crc);
+                client.Send(message);
+            }
+            return true;
         }
     }
 }
